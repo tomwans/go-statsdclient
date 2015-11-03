@@ -1,3 +1,6 @@
+// Package statsdclient provides a client that can emit metrics to a
+// any io.Writer. It is essentially a formatter with a fancy API that
+// will write to any io.Writer.
 package statsdclient
 
 import (
