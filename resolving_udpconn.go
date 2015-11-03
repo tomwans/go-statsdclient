@@ -14,7 +14,7 @@ type ResolvingUDPConn struct {
 
 func (s *ResolvingUDPConn) possiblyResolve() error {
 	// do we need to re-resolve?
-	if s.expires.After(time.Now()) || s.conn == nil {
+	if time.Now().After(s.expires) || s.conn == nil {
 		// re-resolve.
 		raddr, err := net.ResolveUDPAddr("udp", s.Addr)
 		if err != nil {
