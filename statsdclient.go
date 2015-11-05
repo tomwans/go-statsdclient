@@ -54,46 +54,46 @@ func (c *Client) write(stat, value, suffix string, rate float32) error {
 }
 
 // SampledInc will emit a counter metric + sampling rate.
-func (c *Client) SampledInc(stat string, value int64, rate float32) {
-	c.write(stat, strconv.FormatInt(value, 10), "|c", rate)
+func (c *Client) SampledInc(stat string, value int64, rate float32) error {
+	return c.write(stat, strconv.FormatInt(value, 10), "|c", rate)
 }
 
 // SampledGauge will emit a gauge metric + sampling rate.
-func (c *Client) SampledGauge(stat string, value int64, rate float32) {
-	c.write(stat, strconv.FormatInt(value, 10), "|g", rate)
+func (c *Client) SampledGauge(stat string, value int64, rate float32) error {
+	return c.write(stat, strconv.FormatInt(value, 10), "|g", rate)
 }
 
 // SampledDelta will emit a gauge delta metric + sampling rate.
-func (c *Client) SampledDelta(stat string, value int64, rate float32) {
+func (c *Client) SampledDelta(stat string, value int64, rate float32) error {
 	prefix := ""
 	if value > 0 {
 		prefix = "+"
 	}
-	c.write(stat, prefix+strconv.FormatInt(value, 10), "|g", rate)
+	return c.write(stat, prefix+strconv.FormatInt(value, 10), "|g", rate)
 }
 
 // SampledTiming will emit a timing metric + sampling rate.
-func (c *Client) SampledTiming(stat string, duration time.Duration, rate float32) {
+func (c *Client) SampledTiming(stat string, duration time.Duration, rate float32) error {
 	ms := duration.Nanoseconds() / 1000000
-	c.write(stat, strconv.FormatInt(ms, 10), "|ms", rate)
+	return c.write(stat, strconv.FormatInt(ms, 10), "|ms", rate)
 }
 
 // Inc will emit a counter with a sample rate of 1.0
-func (c *Client) Inc(stat string, value int64) {
-	c.SampledInc(stat, value, 1.0)
+func (c *Client) Inc(stat string, value int64) error {
+	return c.SampledInc(stat, value, 1.0)
 }
 
 // Gauge will emit a gauge with a sample rate of 1.0
-func (c *Client) Gauge(stat string, value int64) {
-	c.SampledGauge(stat, value, 1.0)
+func (c *Client) Gauge(stat string, value int64) error {
+	return c.SampledGauge(stat, value, 1.0)
 }
 
 // Delta will emit a gauge delta with a sample rate of 1.0
-func (c *Client) Delta(stat string, value int64) {
-	c.SampledDelta(stat, value, 1.0)
+func (c *Client) Delta(stat string, value int64) error {
+	return c.SampledDelta(stat, value, 1.0)
 }
 
 // Timing will emit a timing metric with a sample rate of 1.0
-func (c *Client) Timing(stat string, duration time.Duration) {
-	c.SampledTiming(stat, duration, 1.0)
+func (c *Client) Timing(stat string, duration time.Duration) error {
+	return c.SampledTiming(stat, duration, 1.0)
 }
