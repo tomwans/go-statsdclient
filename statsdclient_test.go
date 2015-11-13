@@ -8,7 +8,7 @@ import (
 
 type Experiment struct {
 	Stat     string
-	Val      int64
+	Val      int
 	Rate     float32
 	Expected string
 }
