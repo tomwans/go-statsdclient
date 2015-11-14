@@ -2,106 +2,101 @@ package statsdclient
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 )
 
-type Experiment struct {
-	Stat     string
-	Val      int
-	Rate     float32
-	Expected string
+type FmtTest func(*Client) (error, string, string)
+
+var TimingTests = []FmtTest{
+	func(c *Client) (error, string, string) {
+		test := "BasicTiming"
+		expect := "BasicTiming:2000|ms"
+		return c.Timing(test, 2*time.Second), test, expect
+	},
+	func(c *Client) (error, string, string) {
+		test := "NegativeTiming"
+		expect := "NegativeTiming:-2000|ms"
+		return c.Timing(test, -2*time.Second), test, expect
+	},
 }
 
-var incs = []Experiment{
-	{Stat: "testa", Val: 0, Rate: 1.0, Expected: "testa:0|c\n"},
-	{Stat: "testb", Val: 0, Rate: 0.1, Expected: "testb:0|c|@0.1000\n"},
-	{Stat: "testc", Val: 420, Rate: 1.0, Expected: "testc:420|c\n"},
-	{Stat: "testd", Val: -420, Rate: 1.0, Expected: "testd:-420|c\n"},
-	{Stat: "teste", Val: 420, Rate: 0.01, Expected: "teste:420|c|@0.0100\n"},
-	{Stat: "testf", Val: -420, Rate: 0.01, Expected: "testf:-420|c|@0.0100\n"},
-}
-
-func TestInc(t *testing.T) {
+func TestTimingFormatting(t *testing.T) {
 	buf := &bytes.Buffer{}
-	c := Client{Prefix: "", Writer: buf}
-	for _, experiment := range incs {
+	c := &Client{Prefix: "", Writer: buf}
+	for _, test := range TimingTests {
 		buf.Reset()
-		c.SampledInc(experiment.Stat, experiment.Val, experiment.Rate)
+		err, name, expected := test(c)
+		if err != nil {
+			t.Errorf("%s test: error: %s", name, err)
+		}
 		got := string(buf.Bytes())
-		if got != experiment.Expected {
-			t.Fatalf("Inc w/ args: %s %d %f: got: %s, but expected: %s", experiment.Stat, experiment.Val, experiment.Rate, got, experiment.Expected)
+		if got != expected+"\n" {
+			t.Errorf("%s test:\ngot:    '%s'\nexpect: '%s'", name, strings.TrimSpace(got), expected)
 		}
 	}
 }
 
-var gauges = []Experiment{
-	{Stat: "test", Val: 0, Rate: 1.0, Expected: "test:0|g\n"},
-	{Stat: "test", Val: 0, Rate: 0.1, Expected: "test:0|g|@0.1000\n"},
-	{Stat: "test", Val: 420, Rate: 1.0, Expected: "test:420|g\n"},
-	{Stat: "test", Val: -420, Rate: 1.0, Expected: "test:-420|g\n"},
-	{Stat: "test", Val: 420, Rate: 0.01, Expected: "test:420|g|@0.0100\n"},
-	{Stat: "test", Val: -420, Rate: 0.01, Expected: "test:-420|g|@0.0100\n"},
+func TestPrefix(t *testing.T) {
+	buf := &bytes.Buffer{}
+	c := &Client{Prefix: "test_without_trailing_dot", Writer: buf}
+	c.Inc("ok", 1)
+	got := string(buf.Bytes())
+	expected := "test_without_trailing_dot.ok:1|c\n"
+	if got != expected {
+		t.Fatalf("got != expected: %s, %s", got, expected)
+	}
 }
 
-func TestGauges(t *testing.T) {
+func TestPrefixWithDot(t *testing.T) {
 	buf := &bytes.Buffer{}
-	c := Client{Prefix: "", Writer: buf}
-	for _, experiment := range gauges {
-		buf.Reset()
-		c.SampledGauge(experiment.Stat, experiment.Val, experiment.Rate)
-		got := string(buf.Bytes())
-		if got != experiment.Expected {
-			t.Fatalf("Gauges w/ args: %s %d %f: got: %s, but expected: %s", experiment.Stat, experiment.Val, experiment.Rate, got, experiment.Expected)
+	c := &Client{Prefix: "test_with_dot.", Writer: buf}
+	c.Inc("ok", 1)
+	got := string(buf.Bytes())
+	expected := "test_with_dot..ok:1|c\n"
+	if got != expected {
+		t.Fatalf("got != expected: %s, %s", got, expected)
+	}
+}
+
+func BenchmarkParallel(b *testing.B) {
+	b.StopTimer()
+	buf := &bytes.Buffer{}
+	c := &Client{Prefix: "", Writer: buf}
+	b.StartTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			err := c.Inc("test.stat", 420)
+			if err != nil {
+				b.Fatalf("error: %s", err)
+			}
+		}
+	})
+}
+
+func BenchmarkIntFormatting(b *testing.B) {
+	b.StopTimer()
+	buf := &bytes.Buffer{}
+	c := &Client{Prefix: "", Writer: buf}
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		err := c.Inc("test.stat", 420)
+		if err != nil {
+			b.Fatalf("error: %s", err)
 		}
 	}
 }
 
-var deltas = []Experiment{
-	{Stat: "test", Val: 0, Rate: 1.0, Expected: "test:0|g\n"},
-	{Stat: "test", Val: 0, Rate: 0.1, Expected: "test:0|g|@0.1000\n"},
-	{Stat: "test", Val: 420, Rate: 1.0, Expected: "test:+420|g\n"},
-	{Stat: "test", Val: -420, Rate: 1.0, Expected: "test:-420|g\n"},
-	{Stat: "test", Val: 420, Rate: 0.01, Expected: "test:+420|g|@0.0100\n"},
-	{Stat: "test", Val: -420, Rate: 0.01, Expected: "test:-420|g|@0.0100\n"},
-}
-
-func TestDeltas(t *testing.T) {
+func BenchmarkIntFormattingSampled(b *testing.B) {
+	b.StopTimer()
 	buf := &bytes.Buffer{}
-	c := Client{Prefix: "", Writer: buf}
-	for _, experiment := range deltas {
-		buf.Reset()
-		c.SampledDelta(experiment.Stat, experiment.Val, experiment.Rate)
-		got := string(buf.Bytes())
-		if got != experiment.Expected {
-			t.Fatalf("Delta w/ args: %s %d %f: got: %s, but expected: %s", experiment.Stat, experiment.Val, experiment.Rate, got, experiment.Expected)
-		}
-	}
-}
-
-type TimingExperiment struct {
-	Stat     string
-	Val      time.Duration
-	Rate     float32
-	Expected string
-}
-
-var timings = []TimingExperiment{
-	{Stat: "testa", Val: time.Second * 2, Rate: 1.0, Expected: "testa:2000|ms\n"},
-	{Stat: "testb", Val: time.Second * 3, Rate: 1.0, Expected: "testb:3000|ms\n"},
-	{Stat: "testc", Val: time.Second * 4, Rate: 0.73, Expected: "testc:4000|ms|@0.7300\n"},
-	{Stat: "testd", Val: time.Second * 59, Rate: 0.73, Expected: "testd:59000|ms|@0.7300\n"},
-}
-
-func TestTimings(t *testing.T) {
-	buf := &bytes.Buffer{}
-	c := Client{Prefix: "", Writer: buf}
-	for _, experiment := range timings {
-		buf.Reset()
-		c.SampledTiming(experiment.Stat, experiment.Val, experiment.Rate)
-		got := string(buf.Bytes())
-		if got != experiment.Expected {
-			t.Fatalf("Inc w/ args: %s %d %f: got: %s, but expected: %s", experiment.Stat, experiment.Val, experiment.Rate, got, experiment.Expected)
+	c := &Client{Prefix: "", Writer: buf}
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		err := c.SampledInc("test.stat", 420, 0.73)
+		if err != nil {
+			b.Fatalf("error: %s", err)
 		}
 	}
 }
